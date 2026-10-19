@@ -11,31 +11,39 @@ POST /tickets  ->  Router agent  ->  Specialist agent (RAG + tools)  ->  Reviewe
 ## Architecture
 
 ```mermaid
-flowchart LR
-    C[Client] -->|POST /tickets<br/>GET /tickets/stream SSE| TC[TicketsController]
-    TC --> O[OrchestratorService]
+flowchart TD
+    C["Client"] -->|"POST /tickets, GET /tickets/stream (SSE)"| TC["TicketsController"]
+    TC --> O["OrchestratorService"]
 
-    subgraph Agents [AgentsModule]
-        O -->|1. classify| R[RouterAgent<br/>structured JSON + zod]
-        O -->|2. draft| REG[SpecialistRegistry]
-        REG --> B[BillingAgent<br/>+ lookupOrderStatus tool]
-        REG --> T[TechnicalAgent]
-        REG --> A[AccountAgent]
-        REG --> G[GeneralAgent]
-        O -->|3. review| V[ReviewerAgent<br/>tone + grounding]
-        V -.->|rejected: revise once| REG
+    subgraph Agents["AgentsModule"]
+        O -->|"Step 1: classify"| R["RouterAgent<br/>structured JSON + zod"]
+        O -->|"Step 2: draft"| REG["SpecialistRegistry"]
+        REG --> B["BillingAgent<br/>+ lookupOrderStatus tool"]
+        REG --> T["TechnicalAgent"]
+        REG --> A["AccountAgent"]
+        REG --> G["GeneralAgent"]
+        O -->|"Step 3: review"| V["ReviewerAgent<br/>tone + grounding"]
+        V -.->|"rejected: revise once"| REG
     end
 
-    B -->|function call| TOOL[OrderStatusTool<br/>ToolsModule]
-    B & T & A & G -->|retrieve top-k| RAG[RagService<br/>cosine / keyword fallback]
-    RAG --> KB[(kb/*.md)]
+    B -->|"function call"| TOOL["OrderStatusTool<br/>(ToolsModule)"]
+    B --> RAG
+    T --> RAG
+    A --> RAG
+    G --> RAG
+    RAG["RagService<br/>cosine search, keyword fallback"] --> KB[("Knowledge base: kb/*.md")]
 
-    subgraph LLM [LlmModule]
-        P{{LLM_PROVIDER token}} --> GS[GeminiService<br/>retry + timeout + tokens]
+    subgraph LLM["LlmModule"]
+        P{{"LLM_PROVIDER token"}} --> GS["GeminiService<br/>retry + timeout + token usage"]
     end
-    R & B & T & A & G & V --> P
-    RAG -->|embeddings| P
-    GS -->|@google/genai| GEM[(Gemini API)]
+    R --> P
+    B --> P
+    T --> P
+    A --> P
+    G --> P
+    V --> P
+    RAG -->|"embeddings"| P
+    GS -->|"@google/genai SDK"| GEM[("Gemini API")]
 ```
 
 **Pipeline per ticket**
